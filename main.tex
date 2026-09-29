@@ -1,0 +1,767 @@
+\documentclass[UTF8,11pt,a4paper]{ctexart}
+
+\usepackage{amsmath,amssymb,amsthm,mathtools,bm}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage[margin=2.4cm]{geometry}
+\usepackage[colorlinks=true,linkcolor=blue,urlcolor=blue]{hyperref}
+
+\newtheorem{theorem}{定理}[section]
+\newtheorem{proposition}[theorem]{命题}
+\newtheorem{lemma}[theorem]{引理}
+\newtheorem{corollary}[theorem]{推论}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{定义}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{注记}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\T}{\mathsf{T}}
+\newcommand{\one}{\bm 1}
+\newcommand{\dd}{\mathrm d}
+\newcommand{\V}{\mathcal V}
+\newcommand{\B}{\mathcal B}
+\newcommand{\wt}{\widetilde}
+
+\title{Minimum-Balance EC--SAV：面向 Swing 暂态动力学的最小扰动物理能量平衡校正}
+\author{}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+本文记录当前 EC--SAV 新方案的主线思想。与旧版本“只缩放相对速度”或
+“kinetic/potential 两分支切换”不同，新方案直接把校正写成一个受
+center-of-inertia (COI) 约束的最小扰动物理能量平衡投影。第一步使用线性
+SAV--CN predictor；第二步把 predictor 的辅助变量失配
+\(
+\varepsilon=\V(\wt\delta)+C-\wt r^2
+\)
+识别为离散物理能量平衡的全部标量缺陷；第三步在步长相关度量
+\[
+ \|\Delta x\|_h^2
+ =h^{-2}\Delta\delta^\T M\Delta\delta
+ +\Delta\omega^\T M\Delta\omega
+\]
+下，沿平衡泛函的 Riesz 梯度做一个一维非线性投影。该方向在一阶意义下
+给出满足能量平衡所需的最小状态改动，并自动在正常点偏向速度校正、在
+turning point 偏向势能方向，无需人为分支。本文还给出 near-equilibrium
+振幅一致估计、turning-point 超一致性、COI 约束和故障切换能量跳变的分析，
+并列出配套 Python 仿真的验证指标。本文是当前思路说明和理论草稿，不把尚未
+完成的全局误差证明或方法新颖性检索写成既成结论。
+\end{abstract}
+
+\section{模型与真实物理能量}
+
+考虑多机 Swing 系统
+\begin{equation}
+ M\dot\omega+D\omega+\nabla \V(\delta)=0,
+ \qquad
+ \dot\delta=\omega,
+ \label{eq:swing}
+\end{equation}
+其中 \(M=M^\T\succ0\)，\(D=D^\T\succeq0\)。对经典无损网络，可将
+机械功率项并入总势能
+\begin{equation}
+ \V(\delta)
+ =
+ U_{\rm net}(\delta)-P_m^\T\delta .
+\end{equation}
+真实机电能量为
+\begin{equation}
+ H(\delta,\omega)
+ =
+ \frac12\omega^\T M\omega+\V(\delta).
+ \label{eq:physical-energy}
+\end{equation}
+连续解满足
+\begin{equation}
+ \frac{\dd H}{\dd t}
+ =
+ -\omega^\T D\omega\le0.
+ \label{eq:continuous-balance}
+\end{equation}
+
+若模型关于统一角度平移不变，且 \(\one^\T P_m=0\)，则
+\[
+ \V(\delta+c\one)=\V(\delta),
+ \qquad
+ \one^\T\nabla\V(\delta)=0.
+\]
+无阻尼时还存在总动量守恒
+\[
+ \frac{\dd}{\dd t}\bigl(\one^\T M\omega\bigr)=0.
+\]
+
+\section{SAV predictor 与标量一致性缺陷}
+
+在所研究的暂态轨道邻域内取 \(C>0\) 使
+\(
+ \V(\delta)+C>0
+\)，定义
+\begin{equation}
+ q(\delta)=\sqrt{\V(\delta)+C},
+ \qquad
+ r=q(\delta).
+\end{equation}
+令
+\[
+ b(\delta)=\frac{\nabla\V(\delta)}{q(\delta)}=2\nabla q(\delta).
+\]
+则连续系统等价写成
+\begin{align}
+ \dot\delta&=\omega,\\
+ M\dot\omega+D\omega+r\,b(\delta)&=0,\\
+ \dot r&=\frac12 b(\delta)^\T\dot\delta.
+\end{align}
+
+设 \(\delta^{*,n+1/2}\) 是二阶显式中点近似，例如
+\[
+ \delta^{*,n+1/2}
+ =
+ \frac32\delta^n-\frac12\delta^{n-1},
+\]
+首步可用
+\(
+ \delta^n+\frac h2\omega^n
+\)。
+记
+\[
+ b^*=
+ \frac{\nabla\V(\delta^{*,n+1/2})}
+ {\sqrt{\V(\delta^{*,n+1/2})+C}}.
+\]
+SAV--CN predictor 定义为
+\begin{align}
+ \frac{\wt\delta^{n+1}-\delta^n}{h}
+ &=
+ \bar\omega^{n+1/2},
+ \label{eq:sav-delta}\\
+ M\frac{\wt\omega^{n+1}-\omega^n}{h}
+ +D\bar\omega^{n+1/2}
+ +\bar r^{n+1/2}b^*
+ &=0,
+ \label{eq:sav-omega}\\
+ \frac{\wt r^{n+1}-r^n}{h}
+ &=
+ \frac12(b^*)^\T\bar\omega^{n+1/2},
+ \label{eq:sav-r}
+\end{align}
+其中
+\[
+ \bar\omega^{n+1/2}
+ =\frac{\omega^n+\wt\omega^{n+1}}2,
+ \qquad
+ \bar r^{n+1/2}
+ =\frac{r^n+\wt r^{n+1}}2.
+\]
+
+\begin{proposition}[SAV predictor 的修改能量律]
+若 \(r^n=\sqrt{\V(\delta^n)+C}\)，则 predictor 满足
+\begin{equation}
+ \frac12(\wt\omega^{n+1})^\T M\wt\omega^{n+1}
+ +(\wt r^{n+1})^2-C
+ -H^n
+ =
+ -h(\bar\omega^{n+1/2})^\T D\bar\omega^{n+1/2}.
+ \label{eq:sav-modified-law}
+\end{equation}
+\end{proposition}
+
+定义 SAV consistency defect
+\begin{equation}
+ \boxed{
+ \varepsilon^{n+1}
+ =
+ \V(\wt\delta^{n+1})+C-(\wt r^{n+1})^2 .}
+ \label{eq:epsilon}
+\end{equation}
+它测量辅助变量与真实势能之间的离散失配。
+
+\section{直接投影离散物理平衡，而不是只投影能量}
+
+对任意候选状态 \((\delta,\omega)\)，定义一步物理平衡泛函
+\begin{equation}
+ \boxed{
+ \B_n(\delta,\omega)
+ =
+ H(\delta,\omega)-H^n
+ +
+ h\left(
+ \frac{\omega^n+\omega}{2}
+ \right)^\T
+ D
+ \left(
+ \frac{\omega^n+\omega}{2}
+ \right).}
+ \label{eq:balance-functional}
+\end{equation}
+最终离散解要求
+\begin{equation}
+ \B_n(\delta^{n+1},\omega^{n+1})=0.
+ \label{eq:balance-target}
+\end{equation}
+于是自动得到
+\begin{equation}
+ \boxed{
+ H^{n+1}-H^n
+ =
+ -h
+ \left(
+ \frac{\omega^n+\omega^{n+1}}2
+ \right)^\T
+ D
+ \left(
+ \frac{\omega^n+\omega^{n+1}}2
+ \right)\le0.}
+ \label{eq:exact-discrete-balance}
+\end{equation}
+
+\begin{proposition}[缺陷恒等式]
+在 predictor 前一步已经 reset \(r^n=q(\delta^n)\) 的条件下，
+\begin{equation}
+ \boxed{
+ \B_n(\wt\delta^{n+1},\wt\omega^{n+1})
+ =
+ \varepsilon^{n+1}.}
+ \label{eq:defect-identity}
+\end{equation}
+\end{proposition}
+
+\begin{proof}
+用真实势能项
+\(
+ \V(\wt\delta)=\wt r^2-C+\varepsilon
+\)
+替换式~\eqref{eq:sav-modified-law} 即得。
+\end{proof}
+
+这意味着 SAV predictor 对真实离散物理平衡的全部破坏恰好压缩为一个标量
+\(\varepsilon\)。
+
+\section{步长相关最小扰动度量}
+
+令状态修正为
+\[
+ \Delta x=
+ \begin{pmatrix}
+  \Delta\delta\\
+  \Delta\omega
+ \end{pmatrix}.
+\]
+由于 \(\dot\delta=\omega\)，一步内角度误差的自然速度尺度是
+\(\Delta\delta/h\)。因此采用
+\begin{equation}
+ \boxed{
+ \|\Delta x\|_h^2
+ =
+ \frac1{h^2}\Delta\delta^\T M\Delta\delta
+ +
+ \Delta\omega^\T M\Delta\omega .}
+ \label{eq:h-metric}
+\end{equation}
+
+在 predictor 点定义
+\begin{align}
+ f&=\nabla\V(\wt\delta^{n+1}),\\
+ \bar{\wt\omega}
+ &=\frac{\omega^n+\wt\omega^{n+1}}2,\\
+ g_\omega
+ &=M\wt\omega^{n+1}+hD\bar{\wt\omega}.
+ \label{eq:gomega}
+\end{align}
+则
+\[
+ \nabla_\delta\B_n=f,
+ \qquad
+ \nabla_\omega\B_n=g_\omega.
+\]
+
+\subsection{COI 约束}
+
+对旋转对称的多机系统，不允许校正任意改变 common mode。定义
+\(M\)-正交 COI 投影
+\begin{equation}
+ \Pi_M z
+ =
+ z-\one
+ \frac{\one^\T Mz}{\one^\T M\one}.
+ \label{eq:coi-projection}
+\end{equation}
+若不存在整体旋转零模（例如 SMIB），则取 \(\Pi_M=I\)。
+
+受 COI 约束的 Riesz 梯度方向为
+\begin{equation}
+ \boxed{
+ p_h=
+ \begin{pmatrix}
+ p_\delta\\
+ p_\omega
+ \end{pmatrix}
+ =
+ \begin{pmatrix}
+ h^2\Pi_M M^{-1}f\\
+ \Pi_M M^{-1}g_\omega
+ \end{pmatrix}.}
+ \label{eq:projection-direction}
+\end{equation}
+定义
+\begin{equation}
+ \boxed{
+ \chi_h
+ =
+ f^\T p_\delta+g_\omega^\T p_\omega
+ =
+ \|p_h\|_h^2\ge0.}
+ \label{eq:chi}
+\end{equation}
+
+无阻尼且在 COI 坐标中，主导结构退化为
+\[
+ \chi_h
+ =
+ h^2\nabla\V^\T M^{-1}\nabla\V
+ +
+ \wt\omega^\T M\wt\omega.
+\]
+因此 \(\chi_h\) 同时测量一步内势能力和动能方向对能量缺陷的吸收能力。
+
+\section{一阶最小扰动性质}
+
+线性化平衡约束为
+\begin{equation}
+ f^\T\Delta\delta
+ +
+ g_\omega^\T\Delta\omega
+ =
+ -\varepsilon,
+ \label{eq:linearized-balance}
+\end{equation}
+并要求
+\(
+ \Delta\delta,\Delta\omega
+\)
+属于 COI 切空间。
+
+\begin{theorem}[线性化的最小扰动校正]
+若 \(\chi_h>0\)，则在所有满足
+式~\eqref{eq:linearized-balance} 的 COI-compatible 校正中，
+\begin{equation}
+ \boxed{
+ \Delta x_{\min}
+ =
+ -\frac{\varepsilon}{\chi_h}p_h}
+ \label{eq:linear-min-correction}
+\end{equation}
+唯一最小化度量~\eqref{eq:h-metric}，且
+\begin{equation}
+ \boxed{
+ \|\Delta x_{\min}\|_h
+ =
+ \frac{|\varepsilon|}{\sqrt{\chi_h}}.}
+ \label{eq:min-bound}
+\end{equation}
+\end{theorem}
+
+\begin{proof}
+对任意可行 \(\Delta x\)，Riesz 表示给出
+\[
+ -\varepsilon
+ =
+ \langle p_h,\Delta x\rangle_h.
+\]
+由 Cauchy--Schwarz，
+\[
+ |\varepsilon|
+ \le
+ \sqrt{\chi_h}\,\|\Delta x\|_h.
+\]
+等号当且仅当 \(\Delta x\) 与 \(p_h\) 共线，结合约束即得到
+式~\eqref{eq:linear-min-correction}。
+\end{proof}
+
+因此，新方案的核心优点不再表述为“把能量误差变为机器精度”，而是：
+在一阶意义下，它以最小的状态扰动修复 SAV predictor 的物理平衡缺陷。
+
+\section{非线性 exact balance projection}
+
+不直接采用线性校正，而是沿最小扰动方向做一维精确投影：
+\begin{equation}
+ x^{n+1}
+ =
+ \wt x^{n+1}+\lambda p_h.
+ \label{eq:nonlinear-projection}
+\end{equation}
+定义
+\begin{equation}
+ F(\lambda)
+ =
+ \B_n(
+ \wt\delta+\lambda p_\delta,\,
+ \wt\omega+\lambda p_\omega).
+ \label{eq:F}
+\end{equation}
+则
+\begin{equation}
+ F(0)=\varepsilon,
+ \qquad
+ F'(0)=\chi_h.
+ \label{eq:F0}
+\end{equation}
+所以靠近零的小根满足
+\begin{equation}
+ \boxed{
+ \lambda
+ =
+ -\frac{\varepsilon}{\chi_h}
+ +O\!\left(
+ \frac{\varepsilon^2}{\chi_h^2}
+ \right)}
+ \label{eq:lambda-asymptotic}
+\end{equation}
+（精确余项依赖 \(F''\) 的局部界）。
+
+求得 \(\lambda\) 后 reset
+\begin{equation}
+ r^{n+1}
+ =
+ \sqrt{\V(\delta^{n+1})+C}.
+ \label{eq:r-reset}
+\end{equation}
+
+\begin{remark}
+数值实现中不应把 \(\lambda\) 本身当作“校正大小”。真正的状态改动是
+\[
+ \mu:=\|\Delta x\|_h
+ =|\lambda|\sqrt{\chi_h}.
+\]
+当 \(\chi_h\to0\) 时，\(\lambda\) 可以保持 \(O(h^2)\)，但只要
+\(\mu\to0\)，状态映射仍然是正则的。
+\end{remark}
+
+\section{SAV defect 的结构估计}
+
+令
+\[
+ q(\delta)=\sqrt{\V(\delta)+C},
+ \qquad
+ d=\wt\delta^{n+1}-\delta^n,
+ \qquad
+ m=\frac{\delta^n+\wt\delta^{n+1}}2.
+\]
+由 SAV 更新，
+\[
+ \wt r-r^n
+ =
+ \nabla q(\delta^*)^\T d.
+\]
+而中点 Taylor 公式给出
+\[
+ q(\delta^n+d)-q(\delta^n)
+ =
+ \nabla q(m)^\T d+O(\|d\|^3).
+\]
+于是
+\begin{equation}
+ |q(\wt\delta)-\wt r|
+ \le
+ C\left(
+ \|\delta^*-m\|\,\|d\|
+ +\|d\|^3
+ \right).
+ \label{eq:q-defect-bound}
+\end{equation}
+在 \(q,\wt r\) 有界且远离零的区域，
+\begin{equation}
+ \boxed{
+ |\varepsilon|
+ \le
+ C\left(
+ \|\delta^*-m\|\,\|d\|
+ +\|d\|^3
+ \right).}
+ \label{eq:epsilon-structural}
+\end{equation}
+
+对二阶 predictor，
+\[
+ \|\delta^*-m\|=O(h^2),
+ \qquad
+ \|d\|=O(h),
+\]
+故一般点
+\begin{equation}
+ \varepsilon=O(h^3).
+ \label{eq:regular-epsilon}
+\end{equation}
+在非退化 turning point，\(\omega(t_n)=0\) 而加速度非零，此时
+\(
+ d=O(h^2)
+\)，因而
+\begin{equation}
+ \boxed{\varepsilon=O(h^4).}
+ \label{eq:turning-epsilon}
+\end{equation}
+这个额外一阶来自状态位移本身的缩小，不是某个单机算例中的偶然抵消。
+
+\section{稳定平衡点附近的振幅一致估计}
+
+在 COI reduced space 中设
+\[
+ \nabla\V(\delta_e)=0,
+ \qquad
+ K=\nabla^2\V(\delta_e)\succ0.
+\]
+令
+\[
+ y=\delta-\delta_e,\qquad v=\omega,
+\]
+并定义小扰动振幅
+\begin{equation}
+ \rho^2=\|v\|_M^2+\|y\|_K^2.
+ \label{eq:rho}
+\end{equation}
+同时定义步长相关动力学尺度
+\begin{equation}
+ \boxed{
+ \sigma_h^2
+ =
+ \|v\|_M^2
+ +
+ h^2
+ \|\nabla\V(\delta)\|_{M^{-1}}^2.}
+ \label{eq:sigma}
+\end{equation}
+在稳定平衡点小邻域，
+\[
+ c h\rho\le\sigma_h\le C\rho.
+\]
+
+由于
+\[
+ \V(\delta_e+y)
+ =
+ \V(\delta_e)+\frac12y^\T Ky+O(\|y\|^3),
+\]
+有
+\[
+ q(\delta_e+y)
+ =
+ q_e+\frac{1}{4q_e}y^\T Ky+O(\|y\|^3),
+\]
+故 \(\nabla q(\delta_e)=0\)。结合
+式~\eqref{eq:q-defect-bound} 以及二阶 predictor 的
+\[
+ \|d\|\le Ch\sigma_h,
+ \qquad
+ \|\delta^*-m\|\le Ch^2\rho,
+\]
+得到工作估计
+\begin{equation}
+ \boxed{
+ |\varepsilon|
+ \le
+ C h^3\rho\sigma_h.}
+ \label{eq:near-equilibrium-epsilon}
+\end{equation}
+因此
+\[
+ \varepsilon=O(\rho^2h^3).
+\]
+在 turning point，\(\sigma_h=O(h\rho)\)，进一步有
+\begin{equation}
+ \boxed{
+ \varepsilon=O(\rho^2h^4).}
+ \label{eq:near-equilibrium-turning}
+\end{equation}
+
+另一方面，在充分小步长下
+\begin{equation}
+ c\sigma_h^2\le\chi_h\le C\sigma_h^2.
+ \label{eq:chi-sigma}
+\end{equation}
+于是
+\begin{equation}
+ \frac{|\varepsilon|}{\sqrt{\chi_h}}
+ \le Ch^3\rho,
+ \qquad
+ \frac{|\varepsilon|}{\chi_h}
+ \le Ch^2.
+ \label{eq:ratio-bounds}
+\end{equation}
+
+\begin{proposition}[平衡点附近的可去退化]
+在上述局部假设以及标量小根存在的条件下，
+\begin{equation}
+ \boxed{
+ \|x^{n+1}-\wt x^{n+1}\|_h
+ \le Ch^3\rho.}
+ \label{eq:near-equilibrium-correction}
+\end{equation}
+因此当 \(\rho\to0\) 时，状态校正连续趋于零。即使
+\(\lambda\) 本身在 turning-point 方向仅为 \(O(h^2)\)，最终状态映射仍无
+振幅奇异。
+\end{proposition}
+
+精确平衡点处
+\(
+ \rho=\varepsilon=\chi_h=0
+\)，算法直接定义 correction 为零。
+
+\section{二阶精度与线性模态的当前结论}
+
+若 SAV predictor 的局部截断误差是 \(O(h^3)\)，且上述 projection 满足
+\[
+ \|\Delta x\|_h=O(h^3),
+\]
+则校正不降低 predictor 的二阶全局精度。更具体地，在小扰动线性化
+\[
+ M\ddot y+D\dot y+Ky=0
+\]
+附近，若 SAV predictor 的一步矩阵为 \(A_h\)，则校正后的一步映射满足
+\begin{equation}
+ \boxed{
+ A_h^{\rm MB-EC-SAV}
+ =
+ A_h^{\rm SAV}+O(h^3).}
+ \label{eq:linear-map}
+\end{equation}
+因此方法保持二阶一致性，但可能改变 \(O(h^3)\) 的 phase-lag 和 damping
+误差系数。这个 \(O(h^3)\) 系数正是下一阶段需要做单模态放大因子分析的对象，
+因为“能量闭合”本身并不保证轨迹相位更准确。
+
+\section{故障切换与真实能量 jump}
+
+暂态稳定中网络参数在 fault-on、clearing、post-fault 三个阶段分段变化。
+设切换前后势能为 \(\V^-\) 和 \(\V^+\)。理想瞬时开关下
+\[
+ \delta(t_s^+)=\delta(t_s^-),
+ \qquad
+ \omega(t_s^+)=\omega(t_s^-),
+\]
+但物理能量应真实跳变
+\begin{equation}
+ \boxed{
+ H^+-H^-
+ =
+ \V^+(\delta_s)-\V^-(\delta_s).}
+ \label{eq:switch-jump}
+\end{equation}
+算法不应把这个 jump 当作数值漂移去校正。正确处理是保持
+\((\delta,\omega)\) 连续，并按新网络重新初始化
+\[
+ r^+
+ =
+ \sqrt{\V^+(\delta_s)+C}.
+\]
+同时在 event 后重启二阶 extrapolation，避免用跨拓扑的旧 predictor history。
+
+若每一连续阶段都满足式~\eqref{eq:exact-discrete-balance}，则离散全局能量账本为
+\begin{equation}
+ H^N-H^0
+ =
+ -\sum_n
+ h_n(\bar\omega_n)^\T D_n\bar\omega_n
+ +
+ \sum_k
+ \left[
+ \V_k^+(\delta_k)-\V_k^-(\delta_k)
+ \right].
+ \label{eq:piecewise-energy}
+\end{equation}
+
+\section{算法摘要}
+
+每一步执行：
+\begin{enumerate}[label=\arabic*.]
+ \item 由式~\eqref{eq:sav-delta}--\eqref{eq:sav-r} 做一次线性 SAV predictor；
+ \item 计算
+ \[
+  \varepsilon
+  =
+  \V(\wt\delta)+C-\wt r^2;
+ \]
+ \item 计算 \(f,g_\omega,p_h,\chi_h\)；
+ \item 若 \(|\varepsilon|\) 已在机器误差范围内，直接接受 predictor；
+ \item 否则以
+ \[
+  \lambda_0=-\varepsilon/\chi_h
+ \]
+ 为初值，解唯一一维方程
+ \[
+  F(\lambda)=0;
+ \]
+ \item 更新
+ \[
+  (\delta^{n+1},\omega^{n+1})
+  =
+  (\wt\delta,\wt\omega)+\lambda p_h;
+ \]
+ \item reset
+ \[
+  r^{n+1}=\sqrt{\V(\delta^{n+1})+C}.
+ \]
+\end{enumerate}
+
+整个 correction 不解高维非线性系统；非线性部分只有一个标量 root。
+
+\section{配套 Python 仿真应该验证什么}
+
+新脚本 \texttt{minimum\_balance\_ecsav.py} 设计为本地运行，至少输出：
+
+\begin{enumerate}[label=(\arabic*)]
+ \item predictor identity
+ \[
+  \B_n(\wt x)-\varepsilon;
+ \]
+ \item regular point 的 \(\varepsilon=O(h^3)\)；
+ \item turning point 的 \(\varepsilon=O(h^4)\)；
+ \item
+ \[
+  \chi_h,\quad
+  \sigma_h,\quad
+  \lambda,\quad
+  \|\Delta x\|_h;
+ \]
+ \item exact corrected balance residual
+ \[
+  |\B_n(x^{n+1})|;
+ \]
+ \item near-equilibrium 振幅缩放：
+ \[
+  \varepsilon/(\rho^2h^3),
+  \qquad
+  \|\Delta x\|_h/(\rho h^3);
+ \]
+ \item SMIB 全局二阶收敛；
+ \item IEEE 9-bus fault/clearing CCT，并与仓库已有 RK4、midpoint、SAV、
+ old EC--SAV 结果对比。
+\end{enumerate}
+
+真正优先观察的是 state error、CCT error 和 correction norm，而不只是
+“能量残差是否达到 \(10^{-15}\)”。
+
+\section{当前理论边界与下一步}
+
+目前最重要的剩余理论问题有：
+\begin{enumerate}[label=(\arabic*)]
+ \item 给出 \(F''\) 关于 \(\chi_h\) 的统一局部界，从而把小根存在唯一性写成
+ 完整定理；
+ \item 对单模态
+ \[
+  \ddot y+2\zeta\Omega\dot y+\Omega^2y=0
+ \]
+ 计算校正前后的 amplification factor 到 \(h^3/h^4\)，明确 phase-lag
+ 系数到底改善还是恶化；
+ \item 将局部投影误差估计与 event restart 拼接成含 fault switching 的
+ 全局二阶误差证明；
+ \item 对大扰动、跨越势垒甚至 pole slipping 的情况，处理普通平方根 SAV
+ 所需的局部下界 \( \V+C>0 \) 问题。
+\end{enumerate}
+
+因此当前方案最准确的定位是：\emph{一个以 SAV 线性 predictor 为基础、
+直接恢复真实离散耗散平衡、在 COI 约束下具有一阶最小状态扰动性质的
+一维 nonlinear balance projection 方法。}
+
+\end{document}
