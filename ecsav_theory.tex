@@ -1,0 +1,537 @@
+\documentclass[UTF8,11pt,a4paper]{ctexart}
+
+\usepackage{amsmath,amssymb,amsthm,mathtools,bm}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage[colorlinks=true,linkcolor=blue,urlcolor=blue]{hyperref}
+
+\newtheorem{theorem}{定理}[section]
+\newtheorem{proposition}[theorem]{命题}
+\newtheorem{corollary}[theorem]{推论}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{定义}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{注记}
+
+\newcommand{\trans}{\mathsf{T}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\ones}{\bm{1}}
+\newcommand{\dd}{\mathrm{d}}
+\newcommand{\wtH}{\widetilde{H}}
+\newcommand{\wtomega}{\widetilde{\omega}}
+\newcommand{\wtdelta}{\widetilde{\delta}}
+
+\title{面向多机 Swing 暂态稳定的 EC--SAV 方法\\
+       \large 离散能量律、校正可解性与故障切换分析}
+\author{}
+\date{\today}
+
+\begin{document}
+
+\pagestyle{plain}
+\maketitle
+
+\begin{abstract}
+本文整理能量校正标量辅助变量方法（energy-corrected scalar auxiliary
+variable，EC--SAV）目前能够严格说明的性质。该方法先执行一次线性隐式
+SAV 步，再沿保持总角动量的相对速度方向进行单参数校正。校正参数由一个
+标量二次方程确定。在该二次方程存在可接受实根时，无阻尼系统的原始物理
+能量得到精确保持，有阻尼系统则满足指定的离散物理耗散律。本文同时说明
+校正的可行条件、二阶精度所需的非退化假设，以及故障和线路切除时的能量
+重初始化规则。本文内容是原型算法的阶段性理论分析，并非完整的无条件稳定
+性或收敛性定理，也不涉及方法新颖性的文献结论。
+\end{abstract}
+
+\section{连续模型与物理能量}
+
+考虑多机 Swing 系统
+\begin{equation}
+  M\dot{\omega}+D\omega+\nabla U(\delta)=P,
+  \qquad
+  \dot{\delta}=\omega,
+  \label{eq:swing}
+\end{equation}
+其中
+\(
+  \delta,\omega,P\in\R^N
+\)，惯量矩阵
+\(
+  M=\operatorname{diag}(M_1,\ldots,M_N)>0
+\)，阻尼矩阵
+\(
+  D=\operatorname{diag}(D_1,\ldots,D_N)\geq 0
+\)。网络势能可写为
+\begin{equation}
+  U(\delta)
+  =\sum_{e=1}^{E}K_e
+   \left[1-\cos\!\left(B_e^{\trans}\delta\right)\right].
+  \label{eq:potential}
+\end{equation}
+
+原始物理能量定义为
+\begin{equation}
+  H(\delta,\omega)
+  =\frac{1}{2}\omega^{\trans}M\omega
+   +U(\delta)-P^{\trans}\delta.
+  \label{eq:physical-energy}
+\end{equation}
+
+\begin{proposition}[连续物理耗散律]
+方程~\eqref{eq:swing} 的光滑解满足
+\begin{equation}
+  \frac{\dd H}{\dd t}=-\omega^{\trans}D\omega\leq 0.
+  \label{eq:continuous-dissipation}
+\end{equation}
+特别地，当 \(D=0\) 时，物理能量 \(H\) 保持不变。
+\end{proposition}
+
+\begin{proof}
+由链式法则以及 \(\dot\delta=\omega\)，有
+\begin{align*}
+  \frac{\dd H}{\dd t}
+  &=\omega^{\trans}M\dot\omega
+    +\nabla U(\delta)^{\trans}\dot\delta
+    -P^{\trans}\dot\delta \\
+  &=\omega^{\trans}
+    \left(M\dot\omega+\nabla U(\delta)-P\right)
+   =-\omega^{\trans}D\omega.
+\end{align*}
+\end{proof}
+
+若系统关于统一角度平移保持不变，则
+\begin{equation}
+  \ones^{\trans}\nabla U(\delta)=0.
+\end{equation}
+再假设 \(\ones^{\trans}P=0\)，无阻尼系统还满足总角动量守恒：
+\begin{equation}
+  \frac{\dd}{\dd t}\left(\ones^{\trans}M\omega\right)=0.
+  \label{eq:continuous-momentum}
+\end{equation}
+
+\section{线性隐式 SAV 预步}
+
+取常数 \(C\) 使得轨道邻域内 \(U(\delta)+C>0\)，并定义
+\begin{equation}
+  r=\sqrt{U(\delta)+C}.
+  \label{eq:sav-variable}
+\end{equation}
+在第 \(n\) 步使用显式中点预测
+\begin{equation}
+  \bar\delta^{n+\frac12}
+  =\delta^n+\frac{h}{2}\omega^n,
+  \qquad
+  b^n
+  =\frac{\nabla U(\bar\delta^{n+\frac12})}
+  {\sqrt{U(\bar\delta^{n+\frac12})+C}}.
+  \label{eq:sav-predictor}
+\end{equation}
+为简化记号，下文将 \(b^n\) 简记为 \(b\)。令
+\begin{equation}
+  v^{n+\frac12}
+  =\frac{\omega^{n+1}+\omega^n}{2},
+  \qquad
+  \delta^{n+1}=\delta^n+h v^{n+\frac12},
+  \label{eq:mid-velocity}
+\end{equation}
+并离散辅助变量方程：
+\begin{equation}
+  \frac{r^{n+1}-r^n}{h}
+  =\frac12 b^{\trans}v^{n+\frac12}.
+  \label{eq:r-update}
+\end{equation}
+SAV--CN 预步写为
+\begin{equation}
+  M\frac{\omega^{n+1}-\omega^n}{h}
+  +Dv^{n+\frac12}
+  +b\frac{r^{n+1}+r^n}{2}=P.
+  \label{eq:sav-cn}
+\end{equation}
+
+消去 \(r^{n+1}\) 和 \(\omega^{n+1}\)，得到关于
+\(v=v^{n+\frac12}\) 的线性系统
+\begin{equation}
+  \boxed{
+  \left(\frac{2M}{h}+D+\frac{h}{4}bb^{\trans}\right)v
+  =\frac{2M}{h}\omega^n+P-r^n b.}
+  \label{eq:rank-one-system}
+\end{equation}
+当 \(M,D\) 为对角矩阵时，式~\eqref{eq:rank-one-system} 是对角矩阵加
+秩一更新，可用 Sherman--Morrison 公式求解。设
+\begin{equation}
+  A_0=\frac{2M}{h}+D,
+  \qquad \alpha=\frac{h}{4},
+  \qquad f=\frac{2M}{h}\omega^n+P-r^n b,
+\end{equation}
+则
+\begin{equation}
+  v=A_0^{-1}f
+  -A_0^{-1}b\,
+  \frac{\alpha b^{\trans}A_0^{-1}f}
+       {1+\alpha b^{\trans}A_0^{-1}b}.
+  \label{eq:sherman-morrison}
+\end{equation}
+
+\section{SAV 预步的修改能量律}
+
+定义修改能量
+\begin{equation}
+  \wtH^n
+  =\frac12(\omega^n)^{\trans}M\omega^n
+   +(r^n)^2-C-P^{\trans}\delta^n.
+  \label{eq:modified-energy}
+\end{equation}
+
+\begin{proposition}[SAV--CN 的离散修改能量律]
+由式~\eqref{eq:mid-velocity}--\eqref{eq:sav-cn} 产生的离散解满足
+\begin{equation}
+  \boxed{
+  \wtH^{n+1}-\wtH^n
+  =-h\,(v^{n+\frac12})^{\trans}D v^{n+\frac12}.}
+  \label{eq:modified-energy-law}
+\end{equation}
+\end{proposition}
+
+\begin{proof}
+将式~\eqref{eq:sav-cn} 左乘
+\(h(v^{n+\frac12})^{\trans}\)，并使用恒等式
+\begin{equation}
+  (\omega^{n+1}-\omega^n)^{\trans}Mv^{n+\frac12}
+  =\frac12\left[
+  (\omega^{n+1})^{\trans}M\omega^{n+1}
+  -(\omega^n)^{\trans}M\omega^n\right],
+\end{equation}
+以及
+\begin{equation}
+  hP^{\trans}v^{n+\frac12}
+  =P^{\trans}(\delta^{n+1}-\delta^n),
+\end{equation}
+由式~\eqref{eq:r-update} 还可得
+\begin{equation}
+  (r^{n+1})^2-(r^n)^2
+  =\frac{h}{2}b^{\trans}v^{n+\frac12}(r^{n+1}+r^n).
+\end{equation}
+合并上述各式即得结论。
+\end{proof}
+
+\begin{remark}
+式~\eqref{eq:modified-energy-law} 保持的是 \(\wtH\)，而不是原始物理能量
+\(H\)。离散计算后一般有
+\begin{equation}
+  r^n\neq\sqrt{U(\delta^n)+C},
+\end{equation}
+所以修改能量的精确耗散并不自动推出真实物理能量的精确耗散。
+\end{remark}
+
+\section{EC--SAV 标量能量校正}
+
+先完成一次 SAV 预步，得到
+\((\wtdelta^{n+1},\wtomega^{n+1},\widetilde r^{n+1})\)。位置保持不变：
+\begin{equation}
+  \delta^{n+1}=\wtdelta^{n+1}.
+\end{equation}
+将预步速度分解为
+\begin{equation}
+  c=\frac{\ones^{\trans}M\wtomega^{n+1}}
+          {\ones^{\trans}M\ones}\,\ones,
+  \qquad
+  q=\wtomega^{n+1}-c.
+  \label{eq:center-relative-split}
+\end{equation}
+于是
+\begin{equation}
+  \ones^{\trans}Mq=0,
+  \qquad
+  c^{\trans}Mq=0.
+  \label{eq:orthogonality}
+\end{equation}
+EC--SAV 只引入一个标量校正参数 \(s\)：
+\begin{equation}
+  \omega^{n+1}=c+s q.
+  \label{eq:ec-correction}
+\end{equation}
+这样，校正前后的总角动量相同：
+\begin{equation}
+  \ones^{\trans}M\omega^{n+1}
+  =\ones^{\trans}M\wtomega^{n+1}.
+  \label{eq:momentum-preservation}
+\end{equation}
+
+要求校正后的解满足离散物理耗散律
+\begin{equation}
+  H^{n+1}-H^n
+  =-h\left(\frac{\omega^n+\omega^{n+1}}{2}\right)^{\trans}
+  D\left(\frac{\omega^n+\omega^{n+1}}{2}\right).
+  \label{eq:target-physical-law}
+\end{equation}
+记
+\begin{equation}
+  V^{n+1}=U(\wtdelta^{n+1})-P^{\trans}\wtdelta^{n+1},
+  \qquad z=\omega^n+c.
+\end{equation}
+
+\begin{proposition}[校正方程]
+将式~\eqref{eq:ec-correction} 代入目标能量律
+\eqref{eq:target-physical-law}，校正参数 \(s\) 满足标量二次方程
+\begin{equation}
+  \boxed{A s^2+B s+C_q=0,}
+  \label{eq:scalar-quadratic}
+\end{equation}
+其中
+\begin{align}
+  A&=\frac12q^{\trans}Mq+\frac{h}{4}q^{\trans}Dq,
+  \label{eq:coef-A}\\
+  B&=c^{\trans}Mq+\frac{h}{2}z^{\trans}Dq,
+  \label{eq:coef-B}\\
+  C_q&=\frac12c^{\trans}Mc+V^{n+1}-H^n
+       +\frac{h}{4}z^{\trans}Dz.
+  \label{eq:coef-C}
+\end{align}
+在分解~\eqref{eq:center-relative-split} 下，式~\eqref{eq:orthogonality}
+给出 \(c^{\trans}Mq=0\)。
+\end{proposition}
+
+\begin{proof}
+由式~\eqref{eq:ec-correction}，校正后的动能为
+\begin{equation}
+  \frac12(c+s q)^{\trans}M(c+s q)
+  =\frac12c^{\trans}Mc+s c^{\trans}Mq
+   +\frac12s^2q^{\trans}Mq.
+\end{equation}
+另一方面，耗散项可写为
+\begin{equation}
+  \frac{h}{4}(z+s q)^{\trans}D(z+s q).
+\end{equation}
+将两式代入~\eqref{eq:target-physical-law}，按 \(s\) 的次数整理即得
+式~\eqref{eq:scalar-quadratic}--\eqref{eq:coef-C}。
+\end{proof}
+
+\begin{definition}[可接受校正]
+若
+\begin{equation}
+  A>0,
+  \qquad
+  \Delta_s=B^2-4AC_q\geq 0,
+  \label{eq:admissibility}
+\end{equation}
+且二次方程至少有一个非负实根，则称本步 EC 校正是可接受的。算法选择
+距离 \(1\) 最近的非负实根：
+\begin{equation}
+  s=\underset{\sigma\in\mathcal{S}_+}{\operatorname{argmin}}
+  |\sigma-1|,
+\end{equation}
+其中 \(\mathcal{S}_+\) 是式~\eqref{eq:scalar-quadratic} 的非负实根集合。
+\end{definition}
+
+\begin{proposition}[条件精确的物理耗散律]
+若 EC 校正可接受，并以式~\eqref{eq:scalar-quadratic} 的根更新速度，则
+校正后的解精确满足式~\eqref{eq:target-physical-law}。随后重置
+\begin{equation}
+  r^{n+1}=\sqrt{U(\delta^{n+1})+C},
+  \label{eq:r-reset}
+\end{equation}
+即可重新建立辅助变量与真实势能之间的对应关系。
+\end{proposition}
+
+\begin{proof}
+式~\eqref{eq:scalar-quadratic} 正是目标物理耗散律关于 \(s\) 的等价代数形式，
+故任何可接受根都使该能量律成立。式~\eqref{eq:r-reset} 则由定义直接成立。
+\end{proof}
+
+\section{无阻尼系统的严格结论}
+
+当 \(D=0\) 时，利用 \(c^{\trans}Mq=0\)，有
+\begin{equation}
+  A=\frac12q^{\trans}Mq,
+  \qquad B=0.
+\end{equation}
+因此
+\begin{equation}
+  s^2=
+  \frac{H^n-V^{n+1}-\frac12c^{\trans}Mc}
+       {\frac12q^{\trans}Mq}.
+  \label{eq:conservative-scale}
+\end{equation}
+
+\begin{corollary}[原始物理能量守恒]
+设 \(D=0\)、\(q^{\trans}Mq>0\)，并且式~\eqref{eq:conservative-scale}
+右端非负，则 EC--SAV 校正存在，并满足
+\begin{equation}
+  \boxed{H^{n+1}=H^n.}
+  \label{eq:physical-conservation}
+\end{equation}
+若 SAV 预步保持总角动量，则 EC 校正后仍保持相同的总角动量。
+\end{corollary}
+
+\begin{remark}[退化情形]
+若 \(q=0\)，速度缩放方向消失。若此时预步状态已经满足目标能量，令
+\(s=1\) 即可；否则单参数速度缩放无法实现目标能量。类似地，当
+\begin{equation}
+  H^n-V^{n+1}-\frac12c^{\trans}Mc<0
+\end{equation}
+时，不存在实数 \(s\)。因此，能量守恒结论是以可接受性为前提的条件结论，
+不能表述为无条件稳定性定理。
+\end{remark}
+
+\section{有阻尼系统与动量约束}
+
+对任意对角半正定阻尼矩阵 \(D\)，只要式~\eqref{eq:admissibility} 成立，
+EC--SAV 就满足真实物理耗散律~\eqref{eq:target-physical-law}。然而，保持
+SAV 预步总角动量和满足阻尼下的精确动量方程一般不能同时保证。
+
+若 \(D=\gamma M\)，则由 \(\ones^{\trans}Mq=0\) 可得
+\begin{equation}
+  \ones^{\trans}Dq
+  =\gamma\ones^{\trans}Mq=0.
+\end{equation}
+此时，沿 \(q\) 的速度校正不改变比例阻尼对应的中心动量分量。对于一般
+非比例阻尼，当前 EC--SAV 原型优先保证物理能量律，不能同时宣称精确保持
+阻尼动量律。
+
+\section{二阶精度的条件性分析}
+
+目前可以给出如下条件性结论，而不是无条件的全局收敛定理。
+
+\begin{proposition}[条件二阶精度]
+假设：
+\begin{enumerate}[label=(\roman*)]
+  \item \(U\in C^3\)，且精确解在所考虑时间区间内足够光滑；
+  \item 轨道邻域内 \(U(\delta)+C\geq c_0>0\)；
+  \item SAV 预步、\(q\) 以及所选校正根保持有界；
+  \item \(q^{\trans}Mq\geq c_1>0\)，所选根是靠近 \(s=1\) 的连续分支；
+  \item 故障切换时刻由步长端点或精确子步命中。
+\end{enumerate}
+若 SAV 预步的局部截断误差为 \(O(h^3)\)，且其原始物理能量缺陷为
+\(O(h^3)\)，则
+\begin{equation}
+  s-1=O(h^3),
+  \label{eq:scale-order}
+\end{equation}
+从而 EC 校正不降低预步的二阶精度。
+\end{proposition}
+
+\begin{proof}[证明思路]
+显式中点预测点与精确中点之差为 \(O(h^2)\)，因此在光滑性假设下，
+SAV--CN 预步保持二阶一致性。设预步物理能量缺陷为
+\(\varepsilon_H=O(h^3)\)。在 \(s=1\) 附近，校正后能量关于 \(s\) 的
+导数包含 \(q^{\trans}Mq\)。由非退化假设
+\(q^{\trans}Mq\geq c_1>0\) 以及隐函数定理，校正根满足
+\(s-1=O(\varepsilon_H)=O(h^3)\)。故速度校正也是 \(O(h^3)\)，不会改变
+原方法的局部阶。
+\end{proof}
+
+\begin{remark}
+当 \(q\to0\) 时，上述估计失去一致性。转折点或相对动能很小的状态需要
+单独的分析、步长拒绝策略，或采用不同的校正方向。
+\end{remark}
+
+\section{故障切换时的能量映射}
+
+电力系统故障计算是分段动力系统。设网络依次经历
+\begin{equation}
+  K_{\mathrm{pre}}
+  \longrightarrow K_{\mathrm{fault}}
+  \longrightarrow K_{\mathrm{post}},
+\end{equation}
+相应势能和 Hamiltonian 分别记为 \(U_k\) 和 \(H_k\)。在理想开关模型中，
+转子角和转速在切换时刻 \(t_s\) 连续：
+\begin{equation}
+  \delta(t_s^+)=\delta(t_s^-),
+  \qquad
+  \omega(t_s^+)=\omega(t_s^-).
+\end{equation}
+但网络势能发生改变，因此物理能量一般不连续。
+
+\begin{proposition}[拓扑切换的能量跳变]
+若机械功率 \(P\) 在切换瞬间不变，则
+\begin{equation}
+  \boxed{
+  H_{k+1}(t_s^+)-H_k(t_s^-)
+  =U_{k+1}(\delta(t_s))-U_k(\delta(t_s)).}
+  \label{eq:switch-jump}
+\end{equation}
+\end{proposition}
+
+\begin{proof}
+由 \(\delta\) 和 \(\omega\) 的连续性，切换前后的动能项与
+\(-P^{\trans}\delta\) 项相同，相减后只剩势能差。
+\end{proof}
+
+因此，在每次故障施加或线路切除后，应按照新网络重新初始化
+\begin{align}
+  r(t_s^+)
+  &=\sqrt{U_{k+1}(\delta(t_s))+C},
+  \label{eq:switch-r-reset}\\
+  H_{k+1}(t_s^+)
+  &=\frac12\omega(t_s)^{\trans}M\omega(t_s)
+    +U_{k+1}(\delta(t_s))-P^{\trans}\delta(t_s).
+  \label{eq:switch-H-reset}
+\end{align}
+不能把旧网络的 \(r\) 或目标能量直接延续到新网络阶段。
+
+\section{数值验证指标}
+
+为区分修改能量稳定与真实物理正确性，建议固定报告以下指标：
+\begin{enumerate}[label=(\arabic*)]
+  \item 无阻尼能量残差
+  \begin{equation}
+    \max_n\left|H^{n+1}-H^n\right|;
+  \end{equation}
+
+  \item 有阻尼能量平衡残差
+  \begin{equation}
+    \max_n\left|
+    H^{n+1}-H^n
+    +h(v^{n+\frac12})^{\trans}Dv^{n+\frac12}
+    \right|;
+  \end{equation}
+
+  \item 校正判别式 \(\Delta_s\) 的最小值、校正系数 \(s\) 的范围以及
+        校正失败次数；
+
+  \item 切换前后的能量跳变是否满足式~\eqref{eq:switch-jump}；
+
+  \item CCT 误差
+  \begin{equation}
+    \left|\operatorname{CCT}_h-\operatorname{CCT}_{\mathrm{ref}}\right|;
+  \end{equation}
+
+  \item 在 \(t_c<\operatorname{CCT}\) 和
+        \(t_c>\operatorname{CCT}\) 两侧的稳定/失稳分类是否发生翻转。
+\end{enumerate}
+
+当前 IEEE 9-bus 三机原型的一个无阻尼测试结果列于
+表~\ref{tab:cct-result}。参考 CCT 为
+\(0.692731368\,\mathrm{s}\)，稳定判据采用两秒观察窗内最大转子角差小于
+\(\pi\)。这些数值仅属于当前经典机组、无损网络和指定故障模型，不应解释
+为一般电力系统结论。
+
+\begin{table}[htbp]
+  \centering
+  \caption{当前 IEEE 9-bus 原型中 EC--SAV 的 CCT 结果}
+  \label{tab:cct-result}
+  \begin{tabular}{ccc}
+    \toprule
+    步长 \(h\)（s） & 数值 CCT（s） & 绝对误差（ms） \\
+    \midrule
+    0.005 & 0.692739647 & 0.0083 \\
+    0.010 & 0.692760622 & 0.0293 \\
+    0.020 & 0.692825654 & 0.0943 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{当前结论与待解决问题}
+
+EC--SAV 每一步的核心计算由一次秩一线性隐式 SAV 预步和一个标量二次方程
+组成。只要校正满足可接受性条件，算法就能在不重新执行 Newton 迭代的情况
+下恢复原始物理能量或物理耗散律。但是，目前仍有三个理论问题需要完成：
+\begin{enumerate}[label=(\arabic*)]
+  \item 给出判别式非负以及非负根存在的可验证充分条件；
+  \item 处理 \(q\to0\) 时校正方向退化的问题；
+  \item 建立包含故障切换和步长拒绝策略的全局误差估计。
+\end{enumerate}
+因此，现阶段最准确的表述是：EC--SAV 是一种具有条件精确物理能量律的
+线性隐式辅助变量方法，其完整稳定性与收敛理论仍待建立。
+
+\end{document}
