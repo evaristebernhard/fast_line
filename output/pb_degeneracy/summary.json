@@ -1,0 +1,124 @@
+{
+  "harmonic": {
+    "residual_vs_rho_slope": 1.9999999999999978,
+    "chi_vs_rho_slope": 1.9999999999999982,
+    "eta_vs_rho_slope": 0.9999999999999983,
+    "correction_vs_rho_slope": 0.9999999999999986,
+    "max_abs_balance_after_projection": 1.1102230246251565e-16,
+    "max_abs_unit_metric_normal_error": 2.220446049250313e-16
+  },
+  "quartic": {
+    "residual_vs_rho_slope": 4.000000000000001,
+    "chi_vs_rho_slope": 6.000000000000001,
+    "raw_lambda_vs_rho_slope": -2.0,
+    "eta_vs_rho_slope": 1.0000000000000009,
+    "correction_vs_rho_slope": 1.0000000000002134,
+    "max_abs_balance_after_projection": 6.776263578034403e-21
+  },
+  "singular_barrier": {
+    "ell2_generic_residual_observed_order": 2.500000000000001,
+    "ell2_generic_residual_expected_order": 2.5,
+    "ell2_order_preserving_residual_observed_order": 5.000000000000001,
+    "ell2_order_preserving_residual_expected_order": 5.0,
+    "ell2_positive_residual_locally_reachable": false,
+    "ell4_generic_residual_observed_order": 1.2500000000000002,
+    "ell4_generic_residual_expected_order": 1.25,
+    "ell4_order_preserving_residual_observed_order": 5.000000000000001,
+    "ell4_order_preserving_residual_expected_order": 5.0,
+    "ell4_positive_residual_locally_reachable": false
+  },
+  "checks": [
+    {
+      "name": "harmonic residual ~ rho^2",
+      "value": 1.9999999999999978,
+      "target": 2.0,
+      "tolerance": 0.03,
+      "passed": true
+    },
+    {
+      "name": "harmonic chi ~ rho^2",
+      "value": 1.9999999999999982,
+      "target": 2.0,
+      "tolerance": 0.03,
+      "passed": true
+    },
+    {
+      "name": "harmonic eta ~ rho",
+      "value": 0.9999999999999983,
+      "target": 1.0,
+      "tolerance": 0.03,
+      "passed": true
+    },
+    {
+      "name": "harmonic exact correction ~ rho",
+      "value": 0.9999999999999986,
+      "target": 1.0,
+      "tolerance": 0.03,
+      "passed": true
+    },
+    {
+      "name": "quartic residual ~ rho^4",
+      "value": 4.000000000000001,
+      "target": 4.0,
+      "tolerance": 0.03,
+      "passed": true
+    },
+    {
+      "name": "quartic chi ~ rho^6",
+      "value": 6.000000000000001,
+      "target": 6.0,
+      "tolerance": 0.03,
+      "passed": true
+    },
+    {
+      "name": "quartic raw lambda ~ rho^-2",
+      "value": -2.0,
+      "target": -2.0,
+      "tolerance": 0.03,
+      "passed": true
+    },
+    {
+      "name": "quartic eta ~ rho",
+      "value": 1.0000000000000009,
+      "target": 1.0,
+      "tolerance": 0.03,
+      "passed": true
+    },
+    {
+      "name": "quartic exact correction ~ rho",
+      "value": 1.0000000000002134,
+      "target": 1.0,
+      "tolerance": 0.03,
+      "passed": true
+    },
+    {
+      "name": "ell2_generic_residual_observed_order",
+      "value": 2.500000000000001,
+      "target": 2.5,
+      "tolerance": 1e-10,
+      "passed": true
+    },
+    {
+      "name": "ell2_order_preserving_residual_observed_order",
+      "value": 5.000000000000001,
+      "target": 5.0,
+      "tolerance": 1e-10,
+      "passed": true
+    },
+    {
+      "name": "ell4_generic_residual_observed_order",
+      "value": 1.2500000000000002,
+      "target": 1.25,
+      "tolerance": 1e-10,
+      "passed": true
+    },
+    {
+      "name": "ell4_order_preserving_residual_observed_order",
+      "value": 5.000000000000001,
+      "target": 5.0,
+      "tolerance": 1e-10,
+      "passed": true
+    }
+  ],
+  "all_checks_passed": true
+}
