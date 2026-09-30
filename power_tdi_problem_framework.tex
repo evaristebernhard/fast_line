@@ -1,0 +1,536 @@
+\documentclass[UTF8,11pt,a4paper]{ctexart}
+
+\usepackage{amsmath,amssymb,amsthm,mathtools,bm}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage[margin=2.35cm]{geometry}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+
+\newtheorem{problem}{问题}
+\newtheorem{definition}{定义}
+\newtheorem{remark}{注记}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\T}{\mathsf{T}}
+\newcommand{\B}{\mathcal B}
+\newcommand{\E}{\mathcal E}
+\newcommand{\one}{\bm 1}
+
+\title{面向电力系统时域仿真的物理平衡约束时间积分：\\
+问题框架、与数值模态失真的联系及验证路线}
+\author{}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+本文首先固定一个明确的电力系统数值问题，而不是先从某一种具体格式出发。
+电力系统时域仿真（Time-Domain Integration, TDI）依赖数值积分器，因此实际
+得到的动态模态、阻尼、频率和故障后轨迹均包含数值离散带来的失真。已有工作
+已经建立了用离散矩阵铅笔比较连续系统模态与数值模态的方法，并表明不同 TDI
+格式会引入过阻尼、欠阻尼、频率偏移甚至数值失稳。本文关注一个互补的构造问题：
+
+\emph{能否在不显著改变一个高效基积分器的前提下，对每一步做低维、最小扰动的
+物理平衡校正，使离散轨迹严格满足原系统的物理功率--能量关系，并据此降低
+electromechanical modes 的 artificial numerical damping，同时不引入不可接受
+的 frequency/phase distortion？}
+
+该问题不限定于 SAV，也不把“精确能量平衡”本身作为最终目标。物理平衡只是
+约束手段；最终评价量是电力系统 TDI 中已有的动态模态失真、阻尼比失真、
+频率误差、转子角/转速轨迹误差、故障后暂态响应以及计算成本。本文给出问题定义、
+与已有 TDI 模态失真框架的接口、候选算法结构、可验证假设和实验路线。
+\end{abstract}
+
+\section{研究问题不是“再造一个保能量格式”}
+
+电力系统动态仿真通常写成微分--代数方程
+\begin{equation}
+  E\dot x=\phi(x),
+  \label{eq:dae}
+\end{equation}
+其中 \(x\) 同时包含动态状态和代数变量。实际仿真必须用离散时间积分方法，
+因而得到的并不是连续系统本身，而是某个依赖步长 \(h\) 的离散动力系统。
+
+已有电力系统 TDI 文献已经指出，积分方法会改变系统的动态模态。若连续线性化
+模型为
+\begin{equation}
+  E\Delta\dot x=A\Delta x,
+  \label{eq:linearized}
+\end{equation}
+其连续模态由矩阵铅笔 \(sE-A\) 决定。一个给定 TDI 方法线性化后产生离散系统
+\begin{equation}
+  \widetilde E y_n=\widetilde A y_{n-1},
+\end{equation}
+离散特征值 \(\widetilde z_k\) 可映射回 \(s\)-平面：
+\begin{equation}
+  \widetilde s_k=\frac{1}{h}\log \widetilde z_k.
+\end{equation}
+因此可以定义
+\begin{equation}
+  d_{s,k}=\widetilde s_k-s_k,
+  \qquad
+  d_{\zeta,k}=\widetilde\zeta_k-\zeta_k,
+  \label{eq:modal-distortion}
+\end{equation}
+分别度量动态模态和阻尼比的数值失真。
+
+Tzounas、Dassios 与 Milano 已经系统化了上述分析，并用于 FEM、RK4、Backward
+Euler、Implicit Trapezoidal、DIRK 和 BDF2 等常用格式。因此本文不再把
+“分析某积分器会不会失真”当作新问题。
+
+本文要研究的是其逆问题：
+
+\begin{problem}[构造问题]
+给定一个计算上有吸引力的基积分器，能否用一个低维后处理或校正步骤，使接受的
+离散状态严格满足原物理系统的一步功率--能量平衡，并在此约束下尽量少地改变
+基积分器的状态，从而改善电力系统动态模态的数值阻尼特性？
+\end{problem}
+
+换言之，已有工作主要解决
+\[
+  \boxed{\text{给定 TDI 方法} \longrightarrow \text{测量 modal distortion}},
+\]
+而本文研究
+\[
+  \boxed{\text{给定高效基积分器} \longrightarrow
+  \text{施加 physical-balance constraint} \longrightarrow
+  \text{研究 distortion 如何改变}}.
+\]
+
+\section{为什么“物理能量平衡”值得作为约束}
+
+\subsection{Swing 动力学中的物理平衡}
+
+先从能够清楚定义机电能量的多机 Swing 模型出发：
+\begin{equation}
+  M\dot\omega+D\omega+\nabla V(\delta)=0,
+  \qquad
+  \dot\delta=\omega,
+  \label{eq:swing}
+\end{equation}
+其中 \(M\succ0\)，\(D\succeq0\)。定义物理机电能量
+\begin{equation}
+  H(\delta,\omega)
+  =
+  \frac12\omega^\T M\omega+V(\delta).
+  \label{eq:energy}
+\end{equation}
+连续系统满足
+\begin{equation}
+  \frac{\mathrm d H}{\mathrm dt}
+  =
+  -\omega^\T D\omega.
+  \label{eq:physical-balance}
+\end{equation}
+若还存在外部非保守功率输入 \(P_{\rm ext}\)，则更一般地写成
+\begin{equation}
+  \frac{\mathrm d H}{\mathrm dt}
+  =
+  P_{\rm ext}-P_{\rm diss}.
+  \label{eq:general-balance}
+\end{equation}
+
+这里的关键不是“能量必须守恒”，而是：
+\[
+  \boxed{
+  \text{数值积分器不应凭空制造额外的能量注入或额外的数值耗散。}
+  }
+\]
+对于有阻尼电网，正确目标不是 \(H^{n+1}=H^n\)，而是离散状态的能量变化应与
+真实物理功率/耗散的离散积分一致。
+
+\subsection{与 numerical damping 的关系}
+
+在线性同步点附近，
+\begin{equation}
+  M\ddot q+D\dot q+Kq=0.
+  \label{eq:linear-mech}
+\end{equation}
+若 \(D=0\)，连续 electromechanical modes 不应出现真实衰减。
+若一个离散映射
+\begin{equation}
+  x_{n+1}=R_hx_n,
+  \qquad
+  x=(q,v),
+\end{equation}
+精确保持二次机电能量
+\begin{equation}
+  H_2(x)=\frac12 q^\T Kq+\frac12 v^\T Mv,
+\end{equation}
+则令
+\begin{equation}
+  G=
+  \begin{bmatrix}
+    K&0\\
+    0&M
+  \end{bmatrix},
+\end{equation}
+有
+\begin{equation}
+  R_h^\T G R_h=G.
+  \label{eq:G-orthogonal}
+\end{equation}
+这会排除一类纯由数值格式产生的幅值衰减或增长。
+
+但是式~\eqref{eq:G-orthogonal} 并不推出
+\(
+R_h=e^{hA}
+\)。
+因此，精确物理能量平衡可以约束 artificial damping，却未必消除 numerical
+dispersion 或 phase/frequency error。
+
+这给出本文最重要的科学假设，而不是预设结论：
+\begin{equation}
+  \boxed{
+  \text{physical-balance correction 主要改善 damping distortion，
+  但 frequency distortion 必须独立评估。}}
+  \label{eq:key-hypothesis}
+\end{equation}
+
+\section{本文真正要回答的三个问题}
+
+\paragraph{Q1：物理平衡约束是否真的降低 numerical damping？}
+对 dominant electromechanical mode，比较基积分器与校正后方法的
+\begin{equation}
+  d_{\zeta,k}(h)
+  =
+  \widetilde\zeta_k(h)-\zeta_k.
+\end{equation}
+如果物理平衡约束不能显著改善 \(d_{\zeta,k}\)，则继续强调 exact energy balance
+没有足够电力系统意义。
+
+\paragraph{Q2：改善 damping distortion 的代价是什么？}
+同时比较
+\begin{equation}
+  \Delta\omega_k
+  =
+  \operatorname{Im}\widetilde s_k
+  -
+  \operatorname{Im}s_k,
+\end{equation}
+以及完整模态误差
+\begin{equation}
+  |d_{s,k}|.
+\end{equation}
+如果校正只是把误差从实部转移到虚部，即 damping 更准但 frequency/phase 更差，
+则必须明确给出 trade-off，而不能把“精确能量”直接等同于“轨迹更准”。
+
+\paragraph{Q3：small-signal 改善是否能传递到 nonlinear fault TDS？}
+在三相故障、切线、机组跳闸等大扰动下，比较 rotor speed、relative rotor angle、
+first-swing peak、post-fault oscillation damping、CCT 和计算成本。
+目标是验证 small-signal 中观察到的模态变化是否仍能解释 nonlinear TDS 的差异。
+
+\section{候选方法：基积分器外加一步物理平衡校正}
+
+本文暂不把方法绑定到 SAV。设一个任意基积分器从 \(x_n\) 给出 provisional state
+\begin{equation}
+  x^\star=\Psi_h(x_n).
+  \label{eq:base-integrator}
+\end{equation}
+
+定义一步离散物理平衡泛函
+\begin{equation}
+  \B_n(x)
+  =
+  H(x)-H(x_n)-Q_n(x_n,x),
+  \label{eq:balance-functional}
+\end{equation}
+其中 \(Q_n\) 是对真实功率输入/耗散的离散积分。对纯阻尼 Swing，
+一个简单实例为
+\begin{equation}
+  Q_n
+  =
+  -h
+  \left(
+    \frac{\omega_n+\omega}{2}
+  \right)^\T
+  D
+  \left(
+    \frac{\omega_n+\omega}{2}
+  \right).
+\end{equation}
+最终状态要求
+\begin{equation}
+  \boxed{\B_n(x_{n+1})=0.}
+  \label{eq:exact-balance}
+\end{equation}
+
+这意味着本文讨论的“exact”是
+\[
+  \boxed{\text{exact discrete physical balance}},
+\]
+而不是声称数值方法能够精确计算连续时间积分
+\(
+\int_{t_n}^{t_{n+1}} P(t)\,\mathrm dt
+\)。
+
+\subsection{最小扰动原则}
+
+给定 SPD 度量矩阵 \(G_n\)，定义
+\begin{equation}
+  \|\Delta x\|_{G_n}^2
+  =
+  \Delta x^\T G_n\Delta x.
+\end{equation}
+理想校正是
+\begin{equation}
+\begin{aligned}
+  \min_{\Delta x}\quad&
+  \frac12\|\Delta x\|_{G_n}^2,\\
+  \text{s.t.}\quad&
+  \B_n(x^\star+\Delta x)=0.
+\end{aligned}
+\label{eq:nearest-projection}
+\end{equation}
+
+为了避免每一步求解一个高维非线性 KKT 系统，可在 provisional state 处取
+\begin{equation}
+  b_n=\nabla\B_n(x^\star),
+  \qquad
+  d_n=G_n^{-1}b_n,
+\end{equation}
+沿
+\begin{equation}
+  x_{n+1}=x^\star+\lambda d_n
+  \label{eq:scalar-correction}
+\end{equation}
+解一个标量方程
+\begin{equation}
+  \B_n(x^\star+\lambda d_n)=0.
+  \label{eq:scalar-root}
+\end{equation}
+
+线性化意义下，
+\begin{equation}
+  \Delta x
+  =
+  -\frac{\B_n(x^\star)}
+  {b_n^\T G_n^{-1}b_n}
+  G_n^{-1}b_n
+  +O(\B_n(x^\star)^2),
+\end{equation}
+因此该方向是在所选 metric 下的一阶最小扰动方向。
+
+若需要保持 COI、总动量或其他线性结构，可把 \(G_n^{-1}b_n\) 投影到相应切空间。
+这些属于算法实现细节，不应取代本文的电力系统主问题。
+
+\section{与当前仓库实现的关系}
+
+当前仓库中已有的
+\texttt{minimum\_balance\_ecsav.py}
+实现了一个具体原型：
+\begin{enumerate}[label=(\arabic*)]
+  \item 用线性隐式 predictor 产生 provisional state；
+  \item 计算原始物理平衡残差；
+  \item 在步长相关 metric 下构造 COI-compatible correction direction；
+  \item 解一个标量非线性方程，使接受状态满足离散物理能量平衡；
+  \item 再将辅助变量 reset 到物理状态。
+\end{enumerate}
+
+但本文不再把 SAV predictor 视为问题定义的一部分。SAV 只是当前原型的一种
+低成本 predictor。真正需要验证的是：
+\[
+  \boxed{
+  \text{同一个 physical-balance correction 放在不同 base integrator 上，
+  是否对 power-system modal distortion 有稳定而可解释的改善？}}
+\]
+
+因此后续至少应比较：
+\[
+  \text{ITM},\quad
+  \text{RK4},\quad
+  \text{2S-DIRK},\quad
+  \text{当前 linearly implicit predictor},
+\]
+以及这些方法各自加/不加 physical-balance correction 的结果。
+
+\section{与 Tzounas--Dassios--Milano 框架的直接接口}
+
+已有 matrix-pencil 框架不需要被替代，反而应直接作为本文的主要分析工具。
+
+给定校正后的 one-step map
+\begin{equation}
+  x_{n+1}=\Phi_h(x_n),
+\end{equation}
+在同步稳态 \(x_o\) 处线性化：
+\begin{equation}
+  \Delta x_{n+1}
+  =
+  R_h^{\rm PB}\Delta x_n.
+\end{equation}
+计算 \(R_h^{\rm PB}\) 对应的离散特征值
+\(
+\widetilde z_k^{\rm PB}
+\)，映射为
+\begin{equation}
+  \widetilde s_k^{\rm PB}
+  =
+  \frac1h\log \widetilde z_k^{\rm PB}.
+\end{equation}
+最终直接报告
+\begin{equation}
+  d_{s,k}^{\rm PB}
+  =
+  \widetilde s_k^{\rm PB}-s_k,
+  \qquad
+  d_{\zeta,k}^{\rm PB}
+  =
+  \widetilde\zeta_k^{\rm PB}-\zeta_k.
+\end{equation}
+
+这样，本文不创造新的“相位精度指标”或“安全失真指标”，而直接使用已有
+power-system TDI literature 中的 numerical modal distortion 指标。
+
+\section{故障和拓扑切换：本文的 nonlinear 场景}
+
+电力系统暂态仿真包含
+\[
+  \text{pre-fault}
+  \rightarrow
+  \text{fault-on}
+  \rightarrow
+  \text{post-fault}
+\]
+三个连续动力学区间。每次拓扑切换都会改变网络势能或功率函数，因此物理系统
+本身允许一个由拓扑变化导致的能量跳变。本文的目标不是消除该真实跳变，而是：
+\begin{equation}
+  \boxed{
+  \text{连续区间内不引入额外 numerical energy drift；
+  切换点只保留由模型变化带来的 physical jump。}}
+\end{equation}
+
+数值实现必须 event-align fault inception 和 clearing time，不能让一个固定步长
+跨过拓扑切换点后仍声称满足单一模型下的能量平衡。
+
+\section{验证路线}
+
+实验设计应首先复现已有 TDI 文献，而不是从自定义 toy problem 开始。
+
+\subsection{Stage I：small-signal numerical distortion}
+
+在 WSCC 9-bus 或 Kundur two-area 系统上：
+\begin{enumerate}[label=(\arabic*)]
+  \item 求连续 DAE / reduced dynamic model 的关键 electromechanical modes \(s_k\)；
+  \item 对每一种 base method 求 \(\widetilde s_k(h)\)；
+  \item 对其 physical-balance corrected version 求
+  \(\widetilde s_k^{\rm PB}(h)\)；
+  \item 比较
+  \[
+    d_{\zeta,k}(h),\quad
+    \operatorname{Im}d_{s,k}(h),\quad
+    |d_{s,k}(h)|.
+  \]
+\end{enumerate}
+
+第一目标不是证明“我们全面最好”，而是验证：
+\[
+  \boxed{
+  \text{physical balance 是否系统地抑制 damping distortion，
+  以及这会不会换来更大的 frequency distortion。}}
+\]
+
+\subsection{Stage II：nonlinear disturbance}
+
+沿 Tzounas 等人的验证方式，在同一系统上施加：
+\begin{itemize}
+  \item 三相短路及故障切线；
+  \item 发电机跳闸；
+  \item 负荷突变；
+  \item 不同故障清除时间。
+\end{itemize}
+比较：
+\begin{equation}
+  \|\omega_i-\omega_i^{\rm ref}\|,
+  \qquad
+  \|\delta_i-\delta_i^{\rm ref}\|,
+\end{equation}
+以及 first-swing peak、振荡衰减包络和 CCT。
+
+\subsection{Stage III：accuracy--cost comparison}
+
+不采用“所有方法固定同一个 \(h\)”作为唯一比较，因为不同积分器允许的有效步长
+不同。应同时给出：
+\begin{equation}
+  \text{modal distortion tolerance}
+  \longrightarrow
+  \text{maximum usable }h
+  \longrightarrow
+  \text{wall-clock cost}.
+\end{equation}
+这与已有 TDI 文献按相同 \(|d_s|\) 比较不同方法的思想保持一致。
+
+\section{成功与失败判据}
+
+本文不能把“能量残差达到 \(10^{-15}\)”本身当作成功。
+
+\paragraph{支持该方法的结果：}
+若在相同或相近计算成本下，physical-balance correction 能显著降低
+\(
+|d_{\zeta,k}|
+\)
+和 nonlinear post-fault damping error，同时
+\(
+|\operatorname{Im}d_{s,k}|
+\)
+没有明显恶化，则说明物理平衡约束确实对 power-system TDI 有价值。
+
+\paragraph{部分支持：}
+若 damping distortion 明显减小，但 frequency/phase distortion 增大，则应把工作
+定位为一个明确的 accuracy trade-off，并研究 metric 或 correction direction
+是否能在二者之间调节。
+
+\paragraph{否定结果：}
+若 exact physical balance 对 \(d_{\zeta,k}\)、轨迹或允许步长均没有稳定改善，
+或者 correction 成本抵消了步长收益，则说明该路线更适合数值分析而非电力系统
+TDI 应用，应该及时停止扩大理论。
+
+\section{本文暂时不做的事情}
+
+为避免再次偏向纯数学，当前正文不以以下内容作为主贡献：
+\begin{itemize}
+  \item 不讨论“任意积分器都能包装”的最大一般性；
+  \item 不继续展开 quartic critical point、任意阶退化和高阶曲率投影；
+  \item 不以 M1/M2/M3 metric-nearest expansion 作为主线；
+  \item 不声称 exact energy balance 自动意味着更小 trajectory error；
+  \item 不把 SAV 作为方法身份。
+\end{itemize}
+上述内容可在真正证明对 power-system modal distortion 有价值后，再作为附录或
+后续数值分析工作。
+
+\section{当前最小论文主线}
+
+因此，当前最小可发表问题应被固定为：
+
+\begin{quote}
+已知传统电力系统时间积分方法会扭曲 electromechanical modes，并可能引入
+artificial over/under-damping。本文研究：在不更换高效基积分器的前提下，
+通过一步低维、最小扰动的 physical-balance correction，使接受状态严格满足
+原系统的离散物理功率--能量关系；随后使用已有 matrix-pencil TDI framework
+检验该约束是否真正降低 damping distortion，以及它对 frequency/phase
+distortion、故障后暂态轨迹和计算成本的影响。
+\end{quote}
+
+如果上面的句子最终不能被仿真数据支持，则不应该继续围绕该方法扩展更多数学。
+
+\begin{thebibliography}{9}
+
+\bibitem{Tzounas2022}
+G.~Tzounas, I.~Dassios, and F.~Milano,
+Small-Signal Stability Analysis of Numerical Integration Methods,
+\emph{IEEE Transactions on Power Systems}, 2022.
+
+\bibitem{HuangSun2022}
+K.~Huang and K.~Sun,
+A Study on Energy Preservability of Runge--Kutta Methods in Power System Simulation,
+in \emph{Proc. IEEE Power \& Energy Society General Meeting}, 2022.
+
+\bibitem{SymplecticPower}
+Earlier work on symplectic integration for power-system transient stability
+is retained here as a literature anchor; the final manuscript should replace
+this placeholder with the exact bibliographic record after the literature
+audit is completed.
+
+\end{thebibliography}
+
+\end{document}
