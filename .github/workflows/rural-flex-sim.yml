@@ -2,11 +2,11 @@ name: Rural IEEE-123 flexible-device experiment
 on:
   push:
     branches: [experiment/rural-flex-devices]
+  pull_request:
     paths:
       - "simulations/rural_flex_opendss.py"
       - ".github/workflows/rural-flex-sim.yml"
   workflow_dispatch:
-
 jobs:
   simulate:
     runs-on: ubuntu-latest
@@ -18,7 +18,7 @@ jobs:
           python-version: "3.11"
       - run: python -m pip install --upgrade pip
       - run: python -m pip install numpy "dss-python>=0.15,<0.16"
-      - name: Run three operating scenarios and flexible-device sweep
+      - name: Run rural IEEE123 scenarios
         run: python simulations/rural_flex_opendss.py --out output/rural_flex
       - uses: actions/upload-artifact@v4
         if: always()
