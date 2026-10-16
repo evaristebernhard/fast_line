@@ -74,7 +74,9 @@ def main():
     parser.add_argument("--data-dir", type=Path, default=DATA_DIR)
     parser.add_argument("--out", type=Path, default=Path("output/rural_flex"))
     args = parser.parse_args()
-    # OpenDSS Compile may change cwd; anchor result paths before compiling.\n    args.out = args.out.resolve()\n    args.out.mkdir(parents=True, exist_ok=True)
+    # OpenDSS Compile may change cwd; anchor result paths before compiling.
+    args.out = args.out.resolve()
+    args.out.mkdir(parents=True, exist_ok=True)
     data_dir = args.data_dir.resolve()
 
     rows, schemes = [], []
